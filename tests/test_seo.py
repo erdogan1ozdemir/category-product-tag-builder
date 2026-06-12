@@ -36,8 +36,35 @@ def test_manual_csv_roundtrip(tmp_path):
 
 def test_dataforseo_parses_volumes():
     resp = MagicMock(status_code=200)
-    resp.json.return_value = {"tasks": [{"result": [
+    resp.json.return_value = {"tasks": [{"status_code": 20000, "result": [
         {"keyword": "kırmızı abiye", "search_volume": 5400}]}]}
     with patch("seo.volume.requests.post", return_value=resp):
         out = fetch_volumes_dataforseo(["kırmızı abiye"], "user", "pass")
     assert out == {"kırmızı abiye": 5400}
+
+
+def test_apply_threshold_matches_case_insensitive_turkish():
+    combos = [{"combo": "Kırmızı Abiye"}]
+    out = apply_threshold(combos, {"kırmızı abiye": 500}, threshold=100)
+    assert out[0]["volume"] == 500 and out[0]["decision"] == "kategori"
+
+
+def test_dataforseo_task_error_raises():
+    import pytest
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {"tasks": [{"status_code": 40501, "status_message": "Invalid Field", "result": None}]}
+    with patch("seo.volume.requests.post", return_value=resp):
+        with pytest.raises(RuntimeError, match="40501"):
+            fetch_volumes_dataforseo(["x"], "u", "p")
+
+
+def test_dataforseo_chunks_over_1000_keywords():
+    calls = []
+    def fake_post(url, auth=None, json=None, timeout=None):
+        calls.append(len(json[0]["keywords"]))
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"tasks": [{"status_code": 20000, "result": []}]}
+        return resp
+    with patch("seo.volume.requests.post", side_effect=fake_post):
+        fetch_volumes_dataforseo([f"kw {i}" for i in range(1500)], "u", "p")
+    assert calls == [1000, 500]
