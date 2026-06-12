@@ -84,6 +84,8 @@ def _print_result(stage, result, brand):
         return
     if stage == "cross" and isinstance(result, dict):
         print(f"✓ cross tamamlandı: {result['combos']} kombinasyon, hacim kaynağı: {result['volume_source']}")
+        if result["combos"] == 0:
+            print(f"  İpucu: onaylı (reviewed=true) havuz yok olabilir — review aşamasını tamamlayın.")
         if result.get("volume_source") == "template":
             print(f"⚠ Hacim şablonu yazıldı: {result['template_path']}")
             print(f"  volume kolonunu doldurup tekrar çalıştırın: python run.py cross --brand {brand.slug}")

@@ -1,5 +1,5 @@
 """Sektöre uygun facet (filtre) grubu taksonomisi önerisi — LLM görevi."""
-from llm.bridge import run_validated
+from llm.bridge import LLMError, run_validated
 from llm.tasks import new_task
 
 PROMPT = """Sen bir e-ticaret kategori yönetimi uzmanısın.
@@ -21,5 +21,5 @@ def propose_taxonomy(sector: str, raw_groups: list, bridge) -> dict:
     task = build_taxonomy_task(sector, raw_groups)
     ok, failed = run_validated(bridge, [task])
     if failed:
-        raise RuntimeError(f"Taksonomi önerisi doğrulanamadı: {failed[0][1]}")
+        raise LLMError(f"Taksonomi önerisi doğrulanamadı (görev {failed[0][0]['id']}): {failed[0][1]}")
     return ok[task["id"]]

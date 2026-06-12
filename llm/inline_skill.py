@@ -28,6 +28,22 @@ class InlineSkillBridge:
         })
         return task_path
 
+    def invalidate(self, task: dict, errors: list):
+        """Şemaya uymayan sonucu .invalid.json'a taşı ve görevi hata notuyla yeniden kuyruğa yaz."""
+        result_path = self.ws.path(f"pending_llm/{task['id']}.result.json")
+        if os.path.exists(result_path):
+            os.replace(result_path, self.ws.path(f"pending_llm/{task['id']}.result.invalid.json"))
+        # Mutate in-place so _write_pending carries the error note on the next run_batch call
+        task["_onceki_hata"] = "; ".join(errors)
+        self.ws.write_json(f"pending_llm/{task['id']}.json", {
+            **task,
+            "_talimat": (
+                "Bu bir LLM görevidir. 'prompt' alanındaki görevi uygula; cevabını YALNIZCA "
+                "'schema'ya uyan saf JSON olarak, bu dosyanın yanına "
+                f"{task['id']}.result.json adıyla yaz."
+            ),
+        })
+
     def run_batch(self, tasks: list) -> dict:
         results, missing = {}, []
         for t in tasks:

@@ -101,7 +101,8 @@ def stage_taxonomy(brand, config, ws, bridge=None, **opts):
 
 def stage_pools(brand, config, ws, bridge=None, **opts):
     from facets.pool_builder import build_pool
-    from facets.quality_checker import check_pool
+    from facets.quality_checker import apply_quality, build_quality_task
+    from llm.bridge import LLMError, run_validated
     taxonomy = ws.read_json("pools/_taxonomy.json", default=None)
     allowed = [g["group"] for g in taxonomy["groups"]] if taxonomy else None
     raw = ws.read_json("products/raw_facets.json", default={})
@@ -112,8 +113,13 @@ def stage_pools(brand, config, ws, bridge=None, **opts):
         if attrs:
             by_category.setdefault(cat, []).append(attrs)
     b = _bridge(config, ws, bridge)
-    built = []
+
+    # Phase 1: build ALL pools first (skip empty/invalid); collect quality tasks
+    built_pools = {}      # safe_name -> pool (pre-quality)
+    quality_tasks = []    # [{task, safe_name}]
+    task_to_cat = {}      # task_id -> safe_name
     onay_dustu = []
+
     for category, source_maps in by_category.items():
         safe = _safe_category(category)
         if not safe:
@@ -125,12 +131,37 @@ def stage_pools(brand, config, ws, bridge=None, **opts):
             ws.append_jsonl("errors.jsonl", {"stage": "pools", "category": category,
                                              "error": "boş havuz — kaynak veri yetersiz"})
             continue
-        pool = check_pool(safe, pool, b)
+        task = build_quality_task(safe, pool)
+        built_pools[safe] = pool
+        quality_tasks.append(task)
+        task_to_cat[task["id"]] = safe
+
+    # Phase 2: single run_validated for all quality tasks
+    if not quality_tasks:
+        return {"built": [], "onay_dustu": []}
+
+    ok, failed = run_validated(b, quality_tasks)
+
+    # Raise LLMError for API providers when tasks permanently fail
+    # (with inline bridge, invalidate already re-queued them — PendingLLMWork covers it)
+    if failed:
+        msgs = "; ".join(
+            f"{task_to_cat.get(t['id'], t['id'])}: {errs}"
+            for t, errs in failed
+        )
+        raise LLMError(f"Kalite denetimi doğrulanamadı — {msgs}")
+
+    # Phase 3: apply quality results and write pools
+    built = []
+    for task in quality_tasks:
+        safe = task_to_cat[task["id"]]
+        pool = apply_quality(built_pools[safe], ok[task["id"]])
         existing = ws.read_json(f"pools/{safe}.json", default=None)
         if existing is not None and existing.get("reviewed"):
             onay_dustu.append(safe)
         ws.write_json(f"pools/{safe}.json", pool)
         built.append(safe)
+
     return {"built": built, "onay_dustu": onay_dustu}
 
 

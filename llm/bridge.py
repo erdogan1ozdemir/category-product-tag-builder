@@ -45,7 +45,7 @@ def get_bridge(config: dict, workspace=None):
     raise LLMError(f"bilinmeyen provider: {provider}")
 
 
-def run_validated(bridge, tasks: list, max_retries: int = 1):
+def run_validated(bridge, tasks: list, max_retries: int = 2):
     """Görevleri çalıştırır, şema doğrular. Dönen: (ok: {id: result}, failed: [(task, errors)])."""
     ok, failed = {}, []
     pending = list(tasks)
@@ -61,6 +61,10 @@ def run_validated(bridge, tasks: list, max_retries: int = 1):
                 retry.append((t, errors))
             else:
                 ok[t["id"]] = res
+        # Invalidate schema-failing results before next retry so the bridge re-queues them
+        if hasattr(bridge, "invalidate"):
+            for t, errors in retry:
+                bridge.invalidate(t, errors)
         pending = [t for t, _ in retry]
         failed = retry
     return ok, failed

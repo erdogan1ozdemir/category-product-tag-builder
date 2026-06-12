@@ -1,7 +1,7 @@
 """Havuz kalite denetimi: LLM'den remove/merge önerisi alır, deterministik uygular."""
 import json
 
-from llm.bridge import run_validated
+from llm.bridge import LLMError, run_validated
 from llm.tasks import new_task
 
 from .normalizer import tr_lower
@@ -48,5 +48,5 @@ def check_pool(category: str, pool: dict, bridge) -> dict:
     task = build_quality_task(category, pool)
     ok, failed = run_validated(bridge, [task])
     if failed:
-        raise RuntimeError(f"Kalite denetimi doğrulanamadı: {failed[0][1]}")
+        raise LLMError(f"Kalite denetimi doğrulanamadı (görev {failed[0][0]['id']}): {failed[0][1]}")
     return apply_quality(pool, ok[task["id"]])

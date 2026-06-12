@@ -2,7 +2,7 @@ import pytest
 from core.pipeline import run_stage, STAGES
 from core.brand_profile import BrandProfile
 from core.state import Workspace
-from llm.bridge import MockBridge
+from llm.bridge import MockBridge, PendingLLMWork
 
 
 def _brand():
@@ -129,6 +129,17 @@ def test_collect_stage_trendyol_url_categories(tmp_path, monkeypatch):
     run_stage("collect", brand, {}, root=str(tmp_path))
     raw = ws.read_json("products/raw_facets.json")
     assert "Abiye" in raw
+
+
+def test_pools_stage_single_pending_round_for_multiple_categories(tmp_path):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    ws.write_json("products/raw_facets.json",
+                  {"Ruj": [{"Bitiş": ["Mat"]}], "Maskara": [{"Etki": ["Hacim"]}]})
+    from llm.inline_skill import InlineSkillBridge
+    bridge = InlineSkillBridge(ws)
+    with pytest.raises(PendingLLMWork) as exc:
+        run_stage("pools", _brand(), {}, root=str(tmp_path), bridge=bridge)
+    assert len(exc.value.files) == 2
 
 
 def test_collect_stage_writes_seo_landings(tmp_path, monkeypatch):

@@ -53,3 +53,15 @@ def test_rejected_llm_values_logged(tmp_path):
     errs = [e for e in ws.read_jsonl("errors.jsonl") if e.get("stage") == "tag-reject"]
     assert len(errs) == 1
     assert errs[0]["id"] == "p1" and errs[0]["group"] == "Ton" and errs[0]["value"] == "Havuzda Yok"
+
+
+def test_failed_batch_products_not_marked_done(tmp_path):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    ws.append_jsonl("products/products.jsonl",
+                    {"id": "p1", "name": "Ruj", "category": "Ruj", "description": "", "attributes": {}})
+    bridge = MockBridge({"product_tagging": {"yanlis": "sema"}})
+    n = tag_products(ws, {"Ruj": _pool()}, bridge)
+    assert n == 0
+    assert ws.read_jsonl("tagged/tagged.jsonl") == []
+    errs = [e for e in ws.read_jsonl("errors.jsonl") if e.get("stage") == "tag"]
+    assert errs

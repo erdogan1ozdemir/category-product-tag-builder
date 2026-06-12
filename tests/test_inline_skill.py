@@ -2,7 +2,7 @@ import json
 import pytest
 from core.state import Workspace
 from llm.inline_skill import InlineSkillBridge
-from llm.bridge import PendingLLMWork
+from llm.bridge import PendingLLMWork, run_validated
 from llm.tasks import new_task
 
 
@@ -40,3 +40,16 @@ def test_malformed_result_renamed_and_repending(tmp_path):
     assert not bad.exists()
     assert (tmp_path / "m" / "pending_llm" / f"{t['id']}.result.invalid.json").exists()
     assert (tmp_path / "m" / "pending_llm" / f"{t['id']}.json").exists()
+
+
+def test_schema_invalid_result_requeues_with_error_note(tmp_path):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    b = InlineSkillBridge(ws)
+    t = new_task("pool_quality", "havuzu temizle", schema={"remove": "dict"})
+    (tmp_path / "m" / "pending_llm" / f"{t['id']}.result.json").write_text(
+        json.dumps({"remove": "dict-degil"}), encoding="utf-8")
+    with pytest.raises(PendingLLMWork):
+        run_validated(b, [t])
+    assert (tmp_path / "m" / "pending_llm" / f"{t['id']}.result.invalid.json").exists()
+    requeued = json.loads((tmp_path / "m" / "pending_llm" / f"{t['id']}.json").read_text(encoding="utf-8"))
+    assert "yanlış tip" in requeued["_onceki_hata"]
