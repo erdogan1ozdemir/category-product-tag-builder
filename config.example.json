@@ -1,0 +1,16 @@
+{
+  "llm": {
+    "provider": "inline",
+    "model": "claude-opus-4-8",
+    "anthropic_api_key": "",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-2.0-flash",
+    "perplexity_api_key": "",
+    "perplexity_model": "sonar",
+    "batch_size": 50
+  },
+  "dataforseo": { "login": "", "password": "" },
+  "supabase": { "url": "", "service_key": "" },
+  "seo": { "volume_threshold": 100, "two_facet_pairs": [], "exclude_groups": ["Beden", "Marka"] },
+  "scraper": { "timeout": 20, "delay_seconds": 1.0 }
+}
