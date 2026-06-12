@@ -1094,6 +1094,77 @@ def collect_from_urls(urls: list, workspace, delay: float = 1.0, timeout: int = 
 
 ---
 
+### Task 9b: Playwright render fallback (kapsam eki — kullanıcı kararı 2026-06-12)
+
+JS-ağır sitelerde statik çekim ürün adı veremezse headless Chromium ile render edilip aynı üç katman yeniden denenir.
+
+**Files:**
+- Modify: `requirements.txt` (+ `playwright>=1.50`), `config.example.json` (`scraper.playwright_fallback: true`)
+- Modify: `sources/generic_scraper.py`
+- Test: `tests/test_generic_scraper.py` (ekleme)
+
+- [ ] **Step 1: Failing test yaz** (tests/test_generic_scraper.py'ye ekle)
+
+```python
+def test_render_fallback_used_when_static_has_no_name(tmp_path, monkeypatch):
+    from core.state import Workspace
+    from sources import generic_scraper as gs
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: "<html><body>bos</body></html>")
+    monkeypatch.setattr(gs, "fetch_html_rendered", lambda url, timeout=30: _read("jsonld_product.html"))
+    counts = gs.collect_from_urls(["https://spa.example.com/p/1"], ws, delay=0, render_fallback=True)
+    assert counts == {"yeni": 1, "atlandı": 0, "hata": 0, "render": 1}
+    assert ws.read_jsonl("products/products.jsonl")[0]["name"] == "Mat Ruj 03 Kiremit"
+
+
+def test_render_fallback_disabled_logs_error(tmp_path, monkeypatch):
+    from core.state import Workspace
+    from sources import generic_scraper as gs
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: "<html><body>bos</body></html>")
+    counts = gs.collect_from_urls(["https://spa.example.com/p/1"], ws, delay=0, render_fallback=False)
+    assert counts["hata"] == 1
+```
+
+- [ ] **Step 2: FAIL gör**
+
+- [ ] **Step 3: Implementasyon**
+
+`sources/generic_scraper.py`'ye eklenir:
+
+```python
+def fetch_html_rendered(url: str, timeout: int = 30) -> str:
+    """Headless Chromium ile sayfayı render edip HTML döner (JS-ağır siteler için)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError(
+            "playwright kurulu değil — pip install playwright && playwright install chromium"
+        )
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(user_agent=HEADERS["User-Agent"],
+                                    locale="tr-TR")
+            page.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+            try:
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                pass
+            html = page.content()
+        finally:
+            browser.close()
+    return html
+```
+
+`collect_from_urls` imzası `render_fallback: bool = True` parametresi alır; sayaçlara `"render": 0` eklenir. Akış: statik `scrape_product` dene → istek hatası VEYA `name` boşsa ve `render_fallback` açıksa → `fetch_html_rendered` ile HTML alıp `scrape_product(url, html=rendered)` dene (başarıda `render` sayacı artar) → hâlâ başarısızsa `errors.jsonl`.
+
+- [ ] **Step 4: PASS** — tüm takım yeşil
+
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: Playwright render fallback — JS-ağır siteler"`
+
+Not: `stage_collect` (Task 18) `config.scraper.playwright_fallback` değerini `collect_from_urls`'a geçirmelidir.
+
 ### Task 10: sources/trendyol.py — v5'ten taşıma
 
 **Files:**

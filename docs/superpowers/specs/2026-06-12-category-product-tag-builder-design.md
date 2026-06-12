@@ -24,6 +24,7 @@ Herhangi bir marka/sektör için (Boyner, Turkcell, Flormar, Vitra...) e-ticaret
 | Karar | Seçim |
 |---|---|
 | Veri girişi | URL listesi + genel scraping **ve** Trendyol/pazaryeri. Excel/CSV ürün listesi girişi ikincil kolaylık olarak desteklenir (URL kolonu okunur). |
+| JS-ağır siteler | Statik çekim başarısız olursa veya ürün adı ayıklanamazsa **Playwright render fallback** devreye girer (config: `scraper.playwright_fallback`, varsayılan açık; kullanıcı kararı 2026-06-12). |
 | LLM çalıştırma | Üçü birden: `inline` skill (varsayılan, anahtarsız), `claude -p` subprocess, API anahtarlı sağlayıcılar (Anthropic/Gemini/Perplexity) |
 | Onay akışı | Birkaç varyasyon birlikte: sohbet içi onay + Streamlit ekranı + statik HTML rapor (GitHub Pages/Vercel'e konabilir) |
 | Çıktı | JSON/JSONL her zaman; Excel (genel şablon) ve Supabase opsiyonel |
@@ -183,6 +184,6 @@ Taşınmayanlar: Özdilek `product_fetcher`, 6 enricher (yerine LLMBridge), CLIP
 
 ## 10. Açık riskler
 
-- **Genel scraping kırılganlığı:** JSON-LD'siz, ağır JavaScript'li sitelerde ayıklama zayıf kalabilir. Hafifletme: üç katmanlı ayıklama + hatalı ürünlerin raporlanması; gerekirse ileride Playwright render desteği eklenir (ilk sürümde yok).
+- **Genel scraping kırılganlığı:** JSON-LD'siz, ağır JavaScript'li sitelerde statik ayıklama zayıf kalabilir. Hafifletme: üç katmanlı ayıklama + statik çekim ürün adı veremezse otomatik **Playwright render fallback** (headless Chromium ile sayfa render edilip aynı üç katman yeniden denenir) + hâlâ başarısız ürünlerin `errors.jsonl`'a raporlanması. Playwright fallback `scraper.playwright_fallback` ile kapatılabilir; tarayıcı kurulumu `playwright install chromium` gerektirir.
 - **Trendyol Cloudflare:** v5'te de mevcut risk; kaynak opsiyonel olduğu için akışı kırmaz.
 - **Inline mod insan-döngüsü:** çok büyük batch'lerde sohbet üzerinden işlem yavaş olabilir; hafifletme: görev gruplama + kullanıcıya `claude-cli`/API modu önerisi.
