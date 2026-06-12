@@ -151,6 +151,15 @@ def parse_heuristic(html: str):
         val = unescape(re.sub(r"<[^>]+>", "", pair.group(2)).strip())
         if key and val:
             attrs[key] = val
+    # Tailwind-tarzı div-grid spec satırları: <div><div class="...font-semibold...">Etiket</div><div>Değer</div></div>
+    for pair in re.finditer(
+        r"<div[^>]*>\s*<div[^>]*font-(?:semibold|bold)[^>]*>(.*?)</div>\s*<div[^>]*>(.*?)</div>\s*</div>",
+        html, re.S | re.I,
+    ):
+        key = unescape(re.sub(r"<[^>]+>", "", pair.group(1)).strip())
+        val = unescape(re.sub(r"<[^>]+>", "", pair.group(2)).strip())
+        if key and val and len(key) <= 60 and len(val) <= 120:
+            attrs.setdefault(key, val)
     return {"name": name, "description": None, "images": [], "price": None, "attributes": attrs}
 
 

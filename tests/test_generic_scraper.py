@@ -140,3 +140,13 @@ def test_breadcrumb_category_fallback():
             '{"@type":"ListItem","position":2,"item":{"name":"Ruj"}}]}'
             '</script>')
     assert parse_jsonld(html)["category"] == "Ruj"
+
+
+def test_heuristic_div_grid_spec_rows():
+    html = ('<html><body><h1>Çanak Lavabo</h1>'
+            '<div class="grid grid-cols-2"><div class="font-semibold">Derinlik (mm)</div>'
+            '<div class="text">380</div></div>'
+            '<div class="grid"><div class="x font-semibold y">Renk</div><div>Beyaz</div></div>'
+            '</body></html>')
+    d = parse_heuristic(html)
+    assert d["attributes"] == {"Derinlik (mm)": "380", "Renk": "Beyaz"}
