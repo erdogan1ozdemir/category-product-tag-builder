@@ -25,3 +25,11 @@ def test_extract_json_handles_fences_and_text():
     assert extract_json('{"a": 1}') == {"a": 1}
     assert extract_json('Açıklama:\n```json\n{"a": 1}\n```\nbitti') == {"a": 1}
     assert extract_json("hiç json yok") is None
+
+
+def test_new_task_id_includes_payload():
+    t1 = new_task("t", "p", payload={"batch": 1})
+    t2 = new_task("t", "p", payload={"batch": 2})
+    t3 = new_task("t", "p", payload={"batch": 1})
+    assert t1["id"] != t2["id"]
+    assert t1["id"] == t3["id"]

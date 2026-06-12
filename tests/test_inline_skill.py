@@ -27,3 +27,16 @@ def test_reads_result_when_present(tmp_path):
     result_path.write_text(json.dumps({"remove": {"Renk": ["Junk"]}}), encoding="utf-8")
     out = b.run_batch([t])
     assert out[t["id"]]["remove"] == {"Renk": ["Junk"]}
+
+
+def test_malformed_result_renamed_and_repending(tmp_path):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    b = InlineSkillBridge(ws)
+    t = new_task("pool_quality", "havuzu temizle", schema={"remove": "dict"})
+    bad = tmp_path / "m" / "pending_llm" / f"{t['id']}.result.json"
+    bad.write_text('{"remove": bozuk', encoding="utf-8")
+    with pytest.raises(PendingLLMWork):
+        b.run_batch([t])
+    assert not bad.exists()
+    assert (tmp_path / "m" / "pending_llm" / f"{t['id']}.result.invalid.json").exists()
+    assert (tmp_path / "m" / "pending_llm" / f"{t['id']}.json").exists()

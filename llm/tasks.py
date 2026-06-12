@@ -7,7 +7,9 @@ _TYPES = {"list": list, "dict": dict, "str": str, "int": int}
 
 
 def new_task(task_type: str, prompt: str, payload: dict = None, schema: dict = None) -> dict:
-    tid = hashlib.sha1(f"{task_type}|{prompt}".encode("utf-8")).hexdigest()[:12]
+    """Görevi değiştiren her veri prompt veya payload içinde olmalı — id bu ikisinden türetilir."""
+    payload_json = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
+    tid = hashlib.sha1(f"{task_type}|{prompt}|{payload_json}".encode("utf-8")).hexdigest()[:12]
     return {
         "id": tid,
         "type": task_type,
