@@ -2,6 +2,7 @@
 import json
 import re
 import time
+from html import unescape
 
 import requests
 
@@ -44,9 +45,17 @@ def parse_jsonld(html: str):
         brand = obj.get("brand")
         if isinstance(brand, dict):
             brand = brand.get("name")
+        if isinstance(brand, list):
+            brand = brand[0] if brand else None
+            if isinstance(brand, dict):
+                brand = brand.get("name")
+        if brand is not None and not isinstance(brand, str):
+            brand = str(brand)
         offers = obj.get("offers") or {}
         if isinstance(offers, list):
             offers = offers[0] if offers else {}
+        if not isinstance(offers, dict):
+            offers = {}
         images = obj.get("image") or []
         if isinstance(images, str):
             images = [images]
@@ -70,7 +79,7 @@ def _meta(html: str, prop: str):
         rf'<meta[^>]+(?:property|name)=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']',
         html, re.I,
     )
-    return m.group(1).strip() if m else None
+    return unescape(m.group(1).strip()) if m else None
 
 
 def parse_opengraph(html: str):
@@ -92,18 +101,18 @@ def parse_heuristic(html: str):
     title = re.search(r"<title>(.*?)</title>", html, re.S | re.I)
     name = None
     if h1:
-        name = re.sub(r"<[^>]+>", " ", h1.group(1)).strip()
+        name = unescape(re.sub(r"<[^>]+>", " ", h1.group(1)).strip())
     elif title:
-        name = title.group(1).split("|")[0].strip()
+        name = unescape(title.group(1).split("|")[0].strip())
     attrs = {}
     for row in re.finditer(r"<tr[^>]*>\s*<t[hd][^>]*>(.*?)</t[hd]>\s*<td[^>]*>(.*?)</td>", html, re.S | re.I):
-        key = re.sub(r"<[^>]+>", "", row.group(1)).strip()
-        val = re.sub(r"<[^>]+>", "", row.group(2)).strip()
+        key = unescape(re.sub(r"<[^>]+>", "", row.group(1)).strip())
+        val = unescape(re.sub(r"<[^>]+>", "", row.group(2)).strip())
         if key and val:
             attrs[key] = val
     for pair in re.finditer(r"<dt[^>]*>(.*?)</dt>\s*<dd[^>]*>(.*?)</dd>", html, re.S | re.I):
-        key = re.sub(r"<[^>]+>", "", pair.group(1)).strip()
-        val = re.sub(r"<[^>]+>", "", pair.group(2)).strip()
+        key = unescape(re.sub(r"<[^>]+>", "", pair.group(1)).strip())
+        val = unescape(re.sub(r"<[^>]+>", "", pair.group(2)).strip())
         if key and val:
             attrs[key] = val
     return {"name": name, "description": None, "images": [], "price": None, "attributes": attrs}
@@ -111,7 +120,12 @@ def parse_heuristic(html: str):
 
 def scrape_product(url: str, html: str = None, timeout: int = 20) -> dict:
     html = html if html is not None else fetch_html(url, timeout=timeout)
-    layers = [parse_heuristic(html), parse_opengraph(html), parse_jsonld(html)]
+    layers = []
+    for parser in (parse_heuristic, parse_opengraph, parse_jsonld):
+        try:
+            layers.append(parser(html))
+        except Exception:
+            layers.append(None)
     merged = {}
     for layer in layers:
         if not layer:
