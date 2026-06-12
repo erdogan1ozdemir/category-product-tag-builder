@@ -80,8 +80,28 @@ def test_collect_from_urls_skips_done_and_logs_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(gs, "scrape_product", fake_scrape)
     urls = ["https://x/1", "https://x/bozuk"]
     counts = gs.collect_from_urls(urls, ws, delay=0)
-    assert counts == {"yeni": 1, "atlandı": 0, "hata": 1}
+    assert counts["yeni"] == 1 and counts["atlandı"] == 0 and counts["hata"] == 1
     counts2 = gs.collect_from_urls(urls, ws, delay=0)
     assert counts2["atlandı"] == 1
     errs = ws.read_jsonl("errors.jsonl")
     assert errs[0]["stage"] == "collect" and "bozuk" in errs[0]["url"]
+
+
+def test_render_fallback_used_when_static_has_no_name(tmp_path, monkeypatch):
+    from core.state import Workspace
+    from sources import generic_scraper as gs
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: "<html><body>bos</body></html>")
+    monkeypatch.setattr(gs, "fetch_html_rendered", lambda url, timeout=30: _read("jsonld_product.html"))
+    counts = gs.collect_from_urls(["https://spa.example.com/p/1"], ws, delay=0, render_fallback=True)
+    assert counts == {"yeni": 1, "atlandı": 0, "hata": 0, "render": 1}
+    assert ws.read_jsonl("products/products.jsonl")[0]["name"] == "Mat Ruj 03 Kiremit"
+
+
+def test_render_fallback_disabled_logs_error(tmp_path, monkeypatch):
+    from core.state import Workspace
+    from sources import generic_scraper as gs
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: "<html><body>bos</body></html>")
+    counts = gs.collect_from_urls(["https://spa.example.com/p/1"], ws, delay=0, render_fallback=False)
+    assert counts["hata"] == 1

@@ -13,5 +13,5 @@
   "dataforseo": { "login": "", "password": "" },
   "supabase": { "url": "", "service_key": "" },
   "seo": { "volume_threshold": 100, "two_facet_pairs": [], "exclude_groups": ["Beden", "Marka"] },
-  "scraper": { "timeout": 20, "delay_seconds": 1.0 }
+  "scraper": { "timeout": 20, "delay_seconds": 1.0, "playwright_fallback": true }
 }

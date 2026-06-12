@@ -118,6 +118,29 @@ def parse_heuristic(html: str):
     return {"name": name, "description": None, "images": [], "price": None, "attributes": attrs}
 
 
+def fetch_html_rendered(url: str, timeout: int = 30) -> str:
+    """Headless Chromium ile sayfayı render edip HTML döner (JS-ağır siteler için)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError(
+            "playwright kurulu değil — pip install playwright && playwright install chromium"
+        )
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(user_agent=HEADERS["User-Agent"], locale="tr-TR")
+            page.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+            try:
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                pass
+            html = page.content()
+        finally:
+            browser.close()
+    return html
+
+
 def scrape_product(url: str, html: str = None, timeout: int = 20) -> dict:
     html = html if html is not None else fetch_html(url, timeout=timeout)
     layers = []
@@ -136,23 +159,69 @@ def scrape_product(url: str, html: str = None, timeout: int = 20) -> dict:
     return product_record(url, **merged)
 
 
-def collect_from_urls(urls: list, workspace, delay: float = 1.0, timeout: int = 20) -> dict:
-    """URL listesini gez; işlenmişleri atla; hataları errors.jsonl'a yaz."""
+def collect_from_urls(
+    urls: list,
+    workspace,
+    delay: float = 1.0,
+    timeout: int = 20,
+    render_fallback: bool = True,
+) -> dict:
+    """URL listesini gez; işlenmişleri atla; hataları errors.jsonl'a yaz.
+
+    render_fallback=True ise statik fetch'te ürün adı alınamazsa
+    Playwright ile yeniden dener.
+    """
     done = workspace.processed_ids("products/products.jsonl")
-    counts = {"yeni": 0, "atlandı": 0, "hata": 0}
+    counts = {"yeni": 0, "atlandı": 0, "hata": 0, "render": 0}
     for url in urls:
         pid = product_record(url)["id"]
         if pid in done:
             counts["atlandı"] += 1
             continue
+        render_denendi = False
+        rec = None
+        error = None
         try:
             rec = scrape_product(url, timeout=timeout)
-            if not rec.get("name"):
-                raise ValueError("ürün adı ayıklanamadı")
+        except Exception as e:
+            error = e
+            rec = None
+
+        # Static başarısız ya da isim yoksa render fallback dene
+        if (rec is None or not rec.get("name")) and render_fallback:
+            render_denendi = True
+            try:
+                rendered_html = fetch_html_rendered(url, timeout=max(timeout, 30))
+                rec = scrape_product(url, html=rendered_html)
+                if rec.get("name"):
+                    workspace.append_jsonl("products/products.jsonl", rec)
+                    counts["yeni"] += 1
+                    counts["render"] += 1
+                    error = None  # başarılı, hata kaydetme
+                else:
+                    error = error or ValueError("ürün adı ayıklanamadı (render sonrası)")
+            except Exception as e:
+                error = e
+                rec = None
+        elif rec is not None and rec.get("name"):
             workspace.append_jsonl("products/products.jsonl", rec)
             counts["yeni"] += 1
-        except Exception as e:
-            workspace.append_jsonl("errors.jsonl", {"stage": "collect", "url": url, "error": str(e)})
+            error = None
+
+        if error is not None or (rec is not None and not rec.get("name") and not render_denendi):
+            # Son kontrol: hata kaydet
+            if error is None:
+                error = ValueError("ürün adı ayıklanamadı")
+            workspace.append_jsonl(
+                "errors.jsonl",
+                {
+                    "stage": "collect",
+                    "url": url,
+                    "error": str(error),
+                    "render_denendi": render_denendi,
+                },
+            )
             counts["hata"] += 1
+
         time.sleep(delay)
     return counts
