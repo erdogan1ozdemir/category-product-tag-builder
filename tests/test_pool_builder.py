@@ -22,3 +22,11 @@ def test_build_pool_without_allowed_groups_keeps_all():
 def test_empty_groups_dropped():
     pool = build_pool("Ruj", [{"Renk": ["  "]}], allowed_groups=None)
     assert pool_groups(pool) == []
+
+
+def test_build_pool_canonicalizes_group_case_variants():
+    sources = [{"Renk": ["Siyah"]}, {"RENK": ["Bordo"]}]
+    pool = build_pool("Ruj", sources, allowed_groups=["Renk"])
+    havuz = pool["gap_analizi"]["birlesik_filtre_havuzu"]
+    assert list(havuz.keys()) == ["Renk"]
+    assert havuz["Renk"] == ["Bordo", "Siyah"]

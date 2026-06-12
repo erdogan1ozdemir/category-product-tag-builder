@@ -25,22 +25,23 @@ def build_quality_task(category: str, pool: dict) -> dict:
 def apply_quality(pool: dict, result: dict) -> dict:
     havuz = {g: list(v) for g, v in pool_values(pool).items()}
     for group, values in (result.get("remove") or {}).items():
-        if group in havuz:
-            drop = {tr_lower(v) for v in values}
-            havuz[group] = [v for v in havuz[group] if tr_lower(v) not in drop]
-    for group, mapping in (result.get("merge") or {}).items():
-        if group not in havuz:
+        if group not in havuz or not isinstance(values, list):
             continue
-        repl = {tr_lower(k): v for k, v in mapping.items()}
+        drop = {tr_lower(v) for v in values if isinstance(v, str)}
+        havuz[group] = [v for v in havuz[group] if tr_lower(v) not in drop]
+    for group, mapping in (result.get("merge") or {}).items():
+        if group not in havuz or not isinstance(mapping, dict):
+            continue
+        repl = {tr_lower(k): v for k, v in mapping.items() if isinstance(k, str) and isinstance(v, str)}
         seen, out = set(), []
         for v in havuz[group]:
             v = repl.get(tr_lower(v), v)
             if tr_lower(v) not in seen:
                 seen.add(tr_lower(v))
                 out.append(v)
-        havuz[group] = out
+        havuz[group] = sorted(out, key=tr_lower)
     havuz = {g: v for g, v in havuz.items() if v}
-    return {**pool, "gap_analizi": {**pool["gap_analizi"], "birlesik_filtre_havuzu": havuz}}
+    return {**pool, "gap_analizi": {**pool.get("gap_analizi", {}), "birlesik_filtre_havuzu": havuz}}
 
 
 def check_pool(category: str, pool: dict, bridge) -> dict:
