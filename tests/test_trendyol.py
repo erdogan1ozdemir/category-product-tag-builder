@@ -20,3 +20,10 @@ def test_fetch_aggregations_parses_groups():
 def test_fetch_aggregations_network_error_returns_empty():
     with patch("sources.trendyol.requests.get", side_effect=Exception("boom")):
         assert fetch_aggregations("https://www.trendyol.com/abiye-x-c56") == {}
+
+
+def test_fetch_aggregations_shape_drift_returns_empty():
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {"aggregation": [{"title": "Renk", "values": ["düz-string"]}]}
+    with patch("sources.trendyol.requests.get", return_value=resp):
+        assert fetch_aggregations("https://www.trendyol.com/abiye-x-c56") == {}

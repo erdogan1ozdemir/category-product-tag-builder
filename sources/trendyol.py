@@ -7,8 +7,7 @@ dosyadan birebir kopyalandı.
 import json
 import re
 import unicodedata
-from html import unescape
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -55,13 +54,16 @@ def fetch_aggregations(trendyol_url: str, timeout: int = 20) -> dict:
         aggs = resp.json().get("aggregation", [])
     except Exception:
         return {}
-    out = {}
-    for agg in aggs:
-        title = agg.get("title")
-        values = [v.get("text") for v in agg.get("values", []) if v.get("text")]
-        if title and values:
-            out[title] = values[:30]
-    return out
+    try:
+        out = {}
+        for agg in aggs:
+            title = agg.get("title")
+            values = [v.get("text") for v in agg.get("values", []) if v.get("text")]
+            if title and values:
+                out[title] = values[:30]
+        return out
+    except Exception:
+        return {}
 
 
 # ── v5'ten birebir taşınan SEO landing fonksiyonları ──
