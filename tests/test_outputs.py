@@ -48,3 +48,23 @@ def test_supabase_sink_upserts(tmp_path):
     url = post.call_args[0][0]
     assert url.endswith("/rest/v1/pools")
     assert post.call_args[1]["headers"]["apikey"] == "key"
+
+
+def test_supabase_sink_chunks_large_batches(tmp_path):
+    resp = MagicMock(status_code=201, text="")
+    with patch("outputs.supabase_sink.requests.post", return_value=resp) as post:
+        sink = SupabaseSink("https://x.supabase.co", "key")
+        sink.upsert("product_tags", [{"brand_slug": "m", "product_id": str(i)} for i in range(1200)],
+                    conflict="brand_slug,product_id")
+    assert post.call_count == 3
+    sizes = [len(c.kwargs["json"]) for c in post.call_args_list]
+    assert sizes == [500, 500, 200]
+
+
+def test_export_excel_sanitizes_illegal_chars(tmp_path):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    ws.append_jsonl("tagged/tagged.jsonl", {"id": "p1", "url": "u", "name": "Kötü\x01Ad",
+                                            "category": "Ruj", "tags": {}})
+    path = export_excel("m", ws)
+    wb = openpyxl.load_workbook(path)
+    assert wb["Ürünler"].cell(row=2, column=1).value == "KötüAd"

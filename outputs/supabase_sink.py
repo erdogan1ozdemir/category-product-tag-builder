@@ -12,20 +12,23 @@ class SupabaseSink:
     def upsert(self, table: str, rows: list, conflict: str):
         if not rows:
             return
-        resp = requests.post(
-            f"{self.url}/rest/v1/{table}",
-            params={"on_conflict": conflict},
-            headers={
-                "apikey": self.key,
-                "Authorization": f"Bearer {self.key}",
-                "Content-Type": "application/json",
-                "Prefer": "resolution=merge-duplicates",
-            },
-            json=rows,
-            timeout=60,
-        )
-        if resp.status_code not in (200, 201, 204):
-            raise RuntimeError(f"Supabase {table} upsert hatası {resp.status_code}: {resp.text[:300]}")
+        headers = {
+            "apikey": self.key,
+            "Authorization": f"Bearer {self.key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates",
+        }
+        for i in range(0, len(rows), 500):
+            chunk = rows[i:i + 500]
+            resp = requests.post(
+                f"{self.url}/rest/v1/{table}",
+                params={"on_conflict": conflict},
+                headers=headers,
+                json=chunk,
+                timeout=60,
+            )
+            if resp.status_code not in (200, 201, 204):
+                raise RuntimeError(f"Supabase {table} upsert hatası {resp.status_code}: {resp.text[:300]}")
 
 
 def export_supabase(brand_slug: str, ws, cfg: dict):

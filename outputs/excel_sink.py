@@ -1,10 +1,22 @@
 """Genel Excel şablonu: Ürünler (dinamik facet kolonları), Havuz Özeti, Kombinasyonlar."""
 import os
+import re
 
 import openpyxl
 from openpyxl.styles import Font
 
 from facets.pool_builder import pool_values
+
+# openpyxl'in yasakladığı kontrol karakterleri (IllegalCharacterError önlemi)
+try:
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE as _ILLEGAL_RE
+except ImportError:
+    _ILLEGAL_RE = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f]")
+
+
+def _clean(v):
+    """String hücre değerlerinden yasadışı kontrol karakterlerini temizler."""
+    return _ILLEGAL_RE.sub("", v) if isinstance(v, str) else v
 
 
 def export_excel(brand_slug: str, ws) -> str:
@@ -30,7 +42,7 @@ def export_excel(brand_slug: str, ws) -> str:
     for r in tagged:
         row = [r.get("name"), r.get("url"), r.get("category")]
         row += [r.get("tags", {}).get(g, {}).get("value", "") for g in facet_cols]
-        sh.append(row)
+        sh.append([_clean(x) for x in row])
 
     sh2 = wb.create_sheet("Havuz Özeti")
     sh2.append(["Kategori", "Grup", "Değer Sayısı", "Değerler"])
@@ -38,14 +50,14 @@ def export_excel(brand_slug: str, ws) -> str:
         c.font = bold
     for cat, pool in pools.items():
         for group, values in pool_values(pool).items():
-            sh2.append([cat, group, len(values), ", ".join(values)])
+            sh2.append([_clean(x) for x in [cat, group, len(values), ", ".join(values)]])
 
     sh3 = wb.create_sheet("Kombinasyonlar")
     sh3.append(["Kombinasyon", "Aranma Hacmi", "Karar"])
     for c in sh3[1]:
         c.font = bold
     for c in combos:
-        sh3.append([c.get("combo"), c.get("volume"), c.get("decision")])
+        sh3.append([_clean(x) for x in [c.get("combo"), c.get("volume"), c.get("decision")]])
 
     out = ws.path(f"exports/{brand_slug}.xlsx")
     wb.save(out)
