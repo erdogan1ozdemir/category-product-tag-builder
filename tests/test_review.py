@@ -9,3 +9,10 @@ def test_html_report_contains_groups_and_values(tmp_path):
     path = export_html_report("Flormar", ws)
     html = open(path, encoding="utf-8").read()
     assert "Flormar" in html and "Ruj" in html and "Mat" in html and "Bitiş" in html
+
+
+def test_html_report_creates_exports_dir(tmp_path):
+    ws = Workspace("m", root=str(tmp_path))
+    path = export_html_report("X", ws)
+    import os
+    assert os.path.exists(path)

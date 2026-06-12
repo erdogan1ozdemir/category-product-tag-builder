@@ -27,6 +27,7 @@ def export_html_report(brand_name: str, ws) -> str:
             )
             sections.append(f"<h2>{html_mod.escape(name[:-5])}</h2><table>{rows}</table>")
     out = ws.path("exports/report.html")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(TEMPLATE.format(brand=html_mod.escape(brand_name), sections="".join(sections)))
     return out

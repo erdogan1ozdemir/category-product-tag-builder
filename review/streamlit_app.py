@@ -42,13 +42,14 @@ if pool.get("reviewed"):
 
 edited = {}
 for group, values in pool_values(pool).items():
-    keep = st.multiselect(f"{group} ({len(values)} değer)", values, default=values, key=group)
+    keep = st.multiselect(f"{group} ({len(values)} değer)", values, default=values, key=f"{pool_file}:{group}")
     if keep:
         edited[group] = keep
 
 col1, col2 = st.columns(2)
 if col1.button("Kaydet"):
     pool["gap_analizi"]["birlesik_filtre_havuzu"] = edited
+    pool.pop("reviewed", None)  # içerik değişti — onay düşer, yeniden onay gerekir
     ws.write_json(f"pools/{pool_file}", pool)
     st.success("Kaydedildi.")
 if col2.button("Kaydet ve Onayla"):
