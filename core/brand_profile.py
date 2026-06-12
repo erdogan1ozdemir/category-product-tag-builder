@@ -32,5 +32,9 @@ def load_brand(slug: str, brands_dir: str = "brands") -> BrandProfile:
         raise ValueError(f"Marka profilinde zorunlu alan eksik: {', '.join(missing)}")
     if not re.fullmatch(r"[a-z0-9-]+", data["slug"]):
         raise ValueError("slug yalnız küçük harf, rakam ve tire içerebilir")
+    if data["slug"] != slug:
+        raise ValueError(
+            f"Dosya adı ile slug eşleşmiyor: {slug}.json içinde slug='{data['slug']}'"
+        )
     known = {f.name for f in fields(BrandProfile)}
     return BrandProfile(**{k: v for k, v in data.items() if k in known})

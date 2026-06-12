@@ -29,10 +29,21 @@ class Workspace:
             return []
         out = []
         with open(p, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    out.append(json.loads(line))
+            lines = f.readlines()
+        # Find indices of non-empty lines
+        nonempty = [(i, ln.strip()) for i, ln in enumerate(lines) if ln.strip()]
+        for idx, (i, line) in enumerate(nonempty):
+            lineno = i + 1  # 1-based line number
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                is_last = idx == len(nonempty) - 1
+                if is_last:
+                    # Truncated write on last line — skip silently
+                    break
+                raise ValueError(
+                    f"Bozuk JSONL satırı: {p} satır {lineno}"
+                ) from exc
         return out
 
     def processed_ids(self, relpath: str, key: str = "id") -> set:

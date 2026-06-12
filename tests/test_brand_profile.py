@@ -30,3 +30,9 @@ def test_bad_slug_raises(tmp_path):
     _write(tmp_path, "Büyük", {"name": "X", "slug": "Büyük", "sector": "moda"})
     with pytest.raises(ValueError, match="slug"):
         load_brand("Büyük", brands_dir=str(tmp_path))
+
+
+def test_slug_mismatch_raises(tmp_path):
+    _write(tmp_path, "flormar", {"name": "X", "slug": "baska-marka", "sector": "moda"})
+    with pytest.raises(ValueError, match="eşleşmiyor"):
+        load_brand("flormar", brands_dir=str(tmp_path))
