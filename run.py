@@ -56,6 +56,7 @@ def cmd_init(args):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     load_brand(data["slug"])
+    Workspace(data["slug"]).ensure()
     print(f"✓ {path} oluşturuldu. Sonraki adım: workspace/{data['slug']}/input/urls.txt "
           f"dosyasına ürün URL'lerini koyup 'python run.py collect --brand {data['slug']}'")
 

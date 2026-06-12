@@ -138,7 +138,7 @@ category-product-tag-builder/
 ├── seo/                  # Cross-join, hacim entegrasyonu
 ├── sources/              # Generic scraper, Trendyol adaptörü
 ├── tagger/               # Ürün etiketleme, batch işleme
-├── tests/                # Pytest test paketi (89 test)
+├── tests/                # pytest test paketi
 ├── docs/
 │   ├── supabase_schema.sql
 │   └── superpowers/

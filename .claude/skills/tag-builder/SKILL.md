@@ -25,6 +25,8 @@ Her aşama: `python run.py <aşama> --brand <slug>` (repo kökünden, .venv akti
    `pending_llm/` dosyaları listelenirse → "LLM görevi işleme" bölümünü uygula,
    komutu tekrar çalıştır. (exit 2 = argparse kullanım hatası, karıştırma.)
 
+Kesinti/yarım kalma durumunda: `python run.py continue --brand <slug>` kaldığı aşamayı sürdürür; collect hataları için `python run.py retry-errors --brand <slug>`. Exit 1 = profil/doğrulama hatası — mesajdaki yönergeyi uygula.
+
 ## LLM görevi işleme (inline mod — SEN YAPARSIN)
 
 1. Listelenen her `workspace/<slug>/pending_llm/<id>.json` dosyasını oku.
