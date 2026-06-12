@@ -1,0 +1,173 @@
+"""Aşama orkestrasyonu. Her aşama bağımsız; inline modda PendingLLMWork üst katmana taşar."""
+import os
+
+from .state import Workspace
+
+STAGES = ["collect", "taxonomy", "pools", "review", "tag", "cross", "export"]
+
+
+def _bridge(config, ws, override=None):
+    if override is not None:
+        return override
+    from llm.bridge import get_bridge
+    return get_bridge(config, workspace=ws)
+
+
+def _iter_pools(ws, only_reviewed=False):
+    pools_dir = ws.path("pools")
+    if not os.path.isdir(pools_dir):
+        return
+    for name in sorted(os.listdir(pools_dir)):
+        if name.endswith(".json") and not name.startswith("_"):
+            pool = ws.read_json(f"pools/{name}")
+            if only_reviewed and not pool.get("reviewed"):
+                continue
+            yield name[:-5], pool
+
+
+def stage_collect(brand, config, ws, **opts):
+    from sources.generic_scraper import collect_from_urls
+    from sources.trendyol import fetch_aggregations
+    sc = config.get("scraper", {})
+    url_file = ws.path("input/urls.txt")
+    urls = []
+    if os.path.exists(url_file):
+        with open(url_file, encoding="utf-8") as f:
+            urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+    counts = collect_from_urls(
+        urls, ws,
+        delay=sc.get("delay_seconds", 1.0),
+        timeout=sc.get("timeout", 20),
+        render_fallback=sc.get("playwright_fallback", True),
+    ) if urls else {}
+    raw = ws.read_json("products/raw_facets.json", default={})
+    trendyol_bos = []
+    for ty_url in brand.trendyol_urls:
+        aggs = fetch_aggregations(ty_url)
+        if aggs:
+            key = opts.get("category") or brand.name
+            raw.setdefault(key, []).append(aggs)
+        else:
+            trendyol_bos.append(ty_url)
+    ws.write_json("products/raw_facets.json", raw)
+    if trendyol_bos:
+        ws.append_jsonl("errors.jsonl", {"stage": "collect-trendyol",
+                                         "error": "boş aggregation (engel/yanlış URL olabilir)",
+                                         "urls": trendyol_bos})
+    return {**counts, "trendyol_bos": len(trendyol_bos)}
+
+
+def stage_taxonomy(brand, config, ws, bridge=None, **opts):
+    from facets.taxonomy import propose_taxonomy
+    raw = ws.read_json("products/raw_facets.json", default={})
+    raw_groups = sorted({g for maps in raw.values() for m in maps for g in m})
+    for p in ws.read_jsonl("products/products.jsonl"):
+        raw_groups.extend((p.get("attributes") or {}).keys())
+    result = propose_taxonomy(brand.sector, sorted(set(raw_groups)),
+                              _bridge(config, ws, bridge))
+    ws.write_json("pools/_taxonomy.json", result)
+    return result
+
+
+def stage_pools(brand, config, ws, bridge=None, **opts):
+    from facets.pool_builder import build_pool
+    from facets.quality_checker import check_pool
+    taxonomy = ws.read_json("pools/_taxonomy.json", default=None)
+    allowed = [g["group"] for g in taxonomy["groups"]] if taxonomy else None
+    raw = ws.read_json("products/raw_facets.json", default={})
+    by_category = {k: list(v) for k, v in raw.items()}
+    for p in ws.read_jsonl("products/products.jsonl"):
+        cat = p.get("category") or "Genel"
+        attrs = {k: [v] for k, v in (p.get("attributes") or {}).items()}
+        if attrs:
+            by_category.setdefault(cat, []).append(attrs)
+    b = _bridge(config, ws, bridge)
+    built = []
+    for category, source_maps in by_category.items():
+        pool = build_pool(category, source_maps, allowed_groups=allowed)
+        if not pool["gap_analizi"]["birlesik_filtre_havuzu"]:
+            ws.append_jsonl("errors.jsonl", {"stage": "pools", "category": category,
+                                             "error": "boş havuz — kaynak veri yetersiz"})
+            continue
+        pool = check_pool(category, pool, b)
+        ws.write_json(f"pools/{category}.json", pool)
+        built.append(category)
+    return built
+
+
+def stage_review(brand, config, ws, **opts):
+    from review.html_report import export_html_report
+    path = export_html_report(brand.name, ws)
+    return {"html_report": path,
+            "not": "Onay: sohbet içinde, streamlit run review/streamlit_app.py ile "
+                   "veya HTML raporu paylaşarak. Onaylanan havuza reviewed=true yazılmalı."}
+
+
+def stage_tag(brand, config, ws, bridge=None, **opts):
+    from tagger.batch import tag_products
+    pools = {cat: pool for cat, pool in _iter_pools(ws)}
+    batch_size = config.get("llm", {}).get("batch_size", 50)
+    return tag_products(ws, pools, _bridge(config, ws, bridge), batch_size=batch_size)
+
+
+def stage_cross(brand, config, ws, **opts):
+    from seo.cross_join import generate_combos
+    from seo.volume import (apply_threshold, export_manual_csv,
+                            fetch_volumes_dataforseo, import_volumes_csv)
+    seo_cfg = config.get("seo", {})
+    combos = []
+    for category, pool in _iter_pools(ws, only_reviewed=True):
+        combos.extend(generate_combos(category, pool,
+                                      exclude_groups=seo_cfg.get("exclude_groups"),
+                                      two_facet_pairs=seo_cfg.get("two_facet_pairs")))
+    dfs = config.get("dataforseo", {})
+    manual_csv = ws.path("input/volumes.csv")
+    if opts.get("import_volumes"):
+        volumes = import_volumes_csv(opts["import_volumes"])
+    elif dfs.get("login") and dfs.get("password"):
+        volumes = fetch_volumes_dataforseo([c["combo"] for c in combos],
+                                           dfs["login"], dfs["password"])
+    elif os.path.exists(manual_csv):
+        volumes = import_volumes_csv(manual_csv)
+    else:
+        export_manual_csv(combos, manual_csv)
+        volumes = {}
+    ws.write_json("combos/combos.json",
+                  apply_threshold(combos, volumes, seo_cfg.get("volume_threshold", 100)))
+    return len(combos)
+
+
+def stage_export(brand, config, ws, **opts):
+    from outputs.json_sink import export_json
+    out = {"json": export_json(brand.slug, ws)}
+    targets = opts.get("targets") or ["excel"]
+    if "excel" in targets:
+        from outputs.excel_sink import export_excel
+        out["excel"] = export_excel(brand.slug, ws)
+    if "supabase" in targets:
+        sb = config.get("supabase", {})
+        if sb.get("url") and sb.get("service_key"):
+            from outputs.supabase_sink import export_supabase
+            export_supabase(brand.slug, ws, sb)
+            out["supabase"] = "yazıldı"
+        else:
+            out["supabase"] = "atlandı — config.json'da supabase.url/service_key boş"
+    return out
+
+
+_HANDLERS = {
+    "collect": stage_collect, "taxonomy": stage_taxonomy, "pools": stage_pools,
+    "review": stage_review, "tag": stage_tag, "cross": stage_cross, "export": stage_export,
+}
+
+
+def run_stage(stage: str, brand, config: dict, root: str = "workspace",
+              bridge=None, **opts):
+    if stage not in _HANDLERS:
+        raise ValueError(f"bilinmeyen aşama: {stage} (geçerli: {', '.join(STAGES)})")
+    ws = Workspace(brand.slug, root=root).ensure()
+    ws.write_json("_stage.json", {"stage": stage})
+    kwargs = dict(opts)
+    if stage in ("taxonomy", "pools", "tag"):
+        kwargs["bridge"] = bridge
+    return _HANDLERS[stage](brand, config, ws, **kwargs)
