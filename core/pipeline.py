@@ -1,7 +1,13 @@
 """Aşama orkestrasyonu. Her aşama bağımsız; inline modda PendingLLMWork üst katmana taşar."""
 import os
+import re
 
 from .state import Workspace
+
+
+def _safe_category(name: str) -> str:
+    cleaned = re.sub(r"[\\/\x00-\x1f]", "-", str(name or "")).strip().lstrip("_").strip()
+    return cleaned
 
 STAGES = ["collect", "taxonomy", "pools", "review", "tag", "cross", "export"]
 
@@ -83,16 +89,25 @@ def stage_pools(brand, config, ws, bridge=None, **opts):
             by_category.setdefault(cat, []).append(attrs)
     b = _bridge(config, ws, bridge)
     built = []
+    onay_dustu = []
     for category, source_maps in by_category.items():
-        pool = build_pool(category, source_maps, allowed_groups=allowed)
+        safe = _safe_category(category)
+        if not safe:
+            ws.append_jsonl("errors.jsonl", {"stage": "pools", "category": category,
+                                             "error": "geçersiz kategori adı"})
+            continue
+        pool = build_pool(safe, source_maps, allowed_groups=allowed)
         if not pool["gap_analizi"]["birlesik_filtre_havuzu"]:
             ws.append_jsonl("errors.jsonl", {"stage": "pools", "category": category,
                                              "error": "boş havuz — kaynak veri yetersiz"})
             continue
-        pool = check_pool(category, pool, b)
-        ws.write_json(f"pools/{category}.json", pool)
-        built.append(category)
-    return built
+        pool = check_pool(safe, pool, b)
+        existing = ws.read_json(f"pools/{safe}.json", default=None)
+        if existing is not None and existing.get("reviewed"):
+            onay_dustu.append(safe)
+        ws.write_json(f"pools/{safe}.json", pool)
+        built.append(safe)
+    return {"built": built, "onay_dustu": onay_dustu}
 
 
 def stage_review(brand, config, ws, **opts):
@@ -120,21 +135,43 @@ def stage_cross(brand, config, ws, **opts):
         combos.extend(generate_combos(category, pool,
                                       exclude_groups=seo_cfg.get("exclude_groups"),
                                       two_facet_pairs=seo_cfg.get("two_facet_pairs")))
+
+    if not combos:
+        ws.write_json("combos/combos.json", [])
+        return {"combos": 0, "volume_source": "yok", "template_path": None}
+
     dfs = config.get("dataforseo", {})
     manual_csv = ws.path("input/volumes.csv")
+    volume_source = "template"
+    template_path = None
+
     if opts.get("import_volumes"):
         volumes = import_volumes_csv(opts["import_volumes"])
+        volume_source = "import"
     elif dfs.get("login") and dfs.get("password"):
         volumes = fetch_volumes_dataforseo([c["combo"] for c in combos],
                                            dfs["login"], dfs["password"])
+        volume_source = "dataforseo"
     elif os.path.exists(manual_csv):
         volumes = import_volumes_csv(manual_csv)
+        current_combo_set = {c["combo"] for c in combos}
+        if not any(k in current_combo_set for k in volumes):
+            # Stale CSV — no overlap with current combos; regenerate template
+            export_manual_csv(combos, manual_csv)
+            volumes = {}
+            volume_source = "template"
+            template_path = manual_csv
+        else:
+            volume_source = "csv"
     else:
         export_manual_csv(combos, manual_csv)
         volumes = {}
+        volume_source = "template"
+        template_path = manual_csv
+
     ws.write_json("combos/combos.json",
                   apply_threshold(combos, volumes, seo_cfg.get("volume_threshold", 100)))
-    return len(combos)
+    return {"combos": len(combos), "volume_source": volume_source, "template_path": template_path}
 
 
 def stage_export(brand, config, ws, **opts):
