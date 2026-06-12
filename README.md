@@ -33,8 +33,8 @@ playwright install chromium
 ## Hızlı Başlangıç
 
 ```bash
-# 1. Çalışma alanını oluştur
-python run.py init --brand flormar
+# 1. Marka profilini oluştur
+python run.py init
 
 # 2. Ürün URL'lerini gir
 # workspace/flormar/input/urls.txt dosyasını düzenle (her satıra bir URL)
@@ -73,9 +73,9 @@ python run.py export --brand flormar --targets excel supabase
 |---------------|---------------------------------------------------|-------------------------------------|
 | `inline`      | Pipeline exit 3 ile durur, pending_llm dosyaları üretir; Claude Code görevleri yapar | Yok (varsayılan) |
 | `claude-cli`  | Yerel Claude Code CLI'ya subprocess çağrısı       | Claude Code kurulu; `llm.timeout_seconds` ayarlanabilir |
-| `anthropic`   | Anthropic HTTP API                                | `llm.api_key` (Anthropic)           |
-| `gemini`      | Google Gemini API                                 | `llm.api_key` (Google)              |
-| `perplexity`  | Perplexity API                                    | `llm.api_key` (Perplexity)          |
+| `anthropic`   | Anthropic HTTP API                                | `llm.anthropic_api_key`             |
+| `gemini`      | Google Gemini API                                 | `llm.gemini_api_key`                |
+| `perplexity`  | Perplexity API                                    | `llm.perplexity_api_key`            |
 
 ### Inline mod nasıl çalışır?
 
