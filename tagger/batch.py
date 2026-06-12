@@ -1,4 +1,5 @@
 """Toplu etiketleme: resume destekli, hatalar errors.jsonl'a düşer."""
+from facets.normalizer import tr_lower
 from facets.pool_builder import pool_values
 from llm.bridge import run_validated
 
@@ -45,14 +46,21 @@ def tag_products(ws, pools_by_category: dict, bridge, batch_size: int = 50) -> i
             for task, errors in failed:
                 ws.append_jsonl("errors.jsonl", {"stage": "tag", "task_id": task["id"],
                                                  "error": "; ".join(errors)})
-        valid = {g: set(vals) for g, vals in pool_values(pool).items()}
+        valid = {g: {tr_lower(v): v for v in vals} for g, vals in pool_values(pool).items()}
         for p in products:
             tags = {g: {"value": v, "source": "deterministik"} for g, v in det[p["id"]].items()}
             llm_t = llm_tags.get(p["id"], {})
             if isinstance(llm_t, dict):
                 for g, v in llm_t.items():
-                    if g in valid and v in valid[g] and g not in tags:
-                        tags[g] = {"value": v, "source": "llm"}
+                    if not isinstance(v, str):
+                        continue
+                    if g in valid:
+                        canon = valid[g].get(tr_lower(v))
+                        if canon is not None and g not in tags:
+                            tags[g] = {"value": canon, "source": "llm"}
+                        elif canon is None:
+                            ws.append_jsonl("errors.jsonl",
+                                            {"stage": "tag-reject", "id": p["id"], "group": g, "value": v})
             ws.append_jsonl("tagged/tagged.jsonl",
                             {"id": p["id"], "url": p.get("url"), "name": p.get("name"),
                              "category": cat, "tags": tags})
