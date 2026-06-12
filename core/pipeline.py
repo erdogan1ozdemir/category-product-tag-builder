@@ -32,30 +32,54 @@ def _iter_pools(ws, only_reviewed=False):
 
 
 def stage_collect(brand, config, ws, **opts):
-    from sources.generic_scraper import collect_from_urls
-    from sources.trendyol import fetch_aggregations
+    from sources import generic_scraper as gs_mod
+    from sources import trendyol as ty_mod
     sc = config.get("scraper", {})
     url_file = ws.path("input/urls.txt")
     urls = []
+    categories = {}
     if os.path.exists(url_file):
         with open(url_file, encoding="utf-8") as f:
-            urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-    counts = collect_from_urls(
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split(None, 1)
+                urls.append(parts[0])
+                if len(parts) > 1:
+                    categories[parts[0]] = parts[1].strip()
+    counts = gs_mod.collect_from_urls(
         urls, ws,
         delay=sc.get("delay_seconds", 1.0),
         timeout=sc.get("timeout", 20),
         render_fallback=sc.get("playwright_fallback", True),
+        categories=categories,
     ) if urls else {}
     raw = ws.read_json("products/raw_facets.json", default={})
     trendyol_bos = []
-    for ty_url in brand.trendyol_urls:
-        aggs = fetch_aggregations(ty_url)
+    seo_landings = {}
+    for entry in brand.trendyol_urls:
+        if isinstance(entry, dict):
+            ty_url, ty_cat = entry.get("url"), entry.get("category")
+        else:
+            ty_url, ty_cat = entry, None
+        if not ty_url:
+            continue
+        aggs = ty_mod.fetch_aggregations(ty_url)
         if aggs:
-            key = opts.get("category") or brand.name
+            key = ty_cat or opts.get("category") or brand.name
             raw.setdefault(key, []).append(aggs)
+            try:
+                landings = ty_mod.extract_category_seo_landings(ty_url, key)
+                if landings:
+                    seo_landings.setdefault(key, []).extend(landings)
+            except Exception:
+                pass
         else:
             trendyol_bos.append(ty_url)
     ws.write_json("products/raw_facets.json", raw)
+    if seo_landings:
+        ws.write_json("products/seo_landings.json", seo_landings)
     if trendyol_bos:
         ws.append_jsonl("errors.jsonl", {"stage": "collect-trendyol",
                                          "error": "boş aggregation (engel/yanlış URL olabilir)",

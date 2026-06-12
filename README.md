@@ -37,7 +37,11 @@ playwright install chromium
 python run.py init
 
 # 2. Ürün URL'lerini gir
-# workspace/flormar/input/urls.txt dosyasını düzenle (her satıra bir URL)
+# workspace/flormar/input/urls.txt dosyasını düzenle
+# Her satıra bir URL; isteğe bağlı olarak boşlukla ayırarak kategori belirt:
+#   https://site.com/ruj-01  Ruj
+#   https://site.com/fondoten-02  Fondöten
+# Kategori belirtilmezse ürün JSON-LD/breadcrumb'dan okunur; bulunamazsa "Genel" havuzuna düşer.
 
 # 3. Ürünleri topla (scraping)
 python run.py collect --brand flormar
@@ -122,6 +126,22 @@ API anahtarı veya ek kurulum gerekmez.
 | Supabase | Yapılandırılan proje                        | `pools`, `product_tags`, `combos` tabloları; şema: `docs/supabase_schema.sql`; 500 satır chunks |
 
 Supabase için `config.json`'da `supabase.url` ve `supabase.service_key` gereklidir.
+
+---
+
+## Trendyol URL'lerine Kategori Ekleme
+
+`brands/<slug>.json` dosyasında `trendyol_urls` listesi iki formatı destekler:
+
+```json
+"trendyol_urls": [
+  "https://www.trendyol.com/ruj-x-c123",
+  {"url": "https://www.trendyol.com/fondoten-x-c456", "category": "Fondöten"}
+]
+```
+
+- **String** (eski format): kategori `--category` opsiyonundan veya marka adından alınır.
+- **Dict** formatı: `"category"` alanı varsa o kategori kullanılır (her URL için ayrı kategori tanımlanabilir).
 
 ---
 

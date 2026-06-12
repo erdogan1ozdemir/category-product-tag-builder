@@ -4,7 +4,7 @@
   "sector": "moda | kozmetik | banyo | telekom | ...",
   "site_domain": "marka.com.tr",
   "trendyol_brand": "Marka Adı",
-  "trendyol_urls": [],
+  "trendyol_urls": [{"url": "https://www.trendyol.com/ornek-x-c123", "category": "Örnek Kategori"}],
   "language": "tr",
   "notes": ""
 }

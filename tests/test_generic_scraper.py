@@ -110,3 +110,33 @@ def test_render_fallback_disabled_logs_error(tmp_path, monkeypatch):
     monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: "<html><body>bos</body></html>")
     counts = gs.collect_from_urls(["https://spa.example.com/p/1"], ws, delay=0, render_fallback=False)
     assert counts["hata"] == 1
+
+
+def test_collect_assigns_explicit_category(tmp_path, monkeypatch):
+    from core.state import Workspace
+    from sources import generic_scraper as gs
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr(gs, "fetch_html", lambda url, timeout=20: _read("jsonld_product.html"))
+    gs.collect_from_urls(["https://x/1"], ws, delay=0,
+                         categories={"https://x/1": "Ruj"})
+    assert ws.read_jsonl("products/products.jsonl")[0]["category"] == "Ruj"
+
+
+def test_jsonld_category_extraction():
+    from sources.generic_scraper import parse_jsonld
+    html = ('<script type="application/ld+json">'
+            '{"@type":"Product","name":"X","category":"Kozmetik > Makyaj > Ruj"}'
+            '</script>')
+    assert parse_jsonld(html)["category"] == "Ruj"
+
+
+def test_breadcrumb_category_fallback():
+    from sources.generic_scraper import parse_jsonld
+    html = ('<script type="application/ld+json">'
+            '{"@type":"Product","name":"X"}</script>'
+            '<script type="application/ld+json">'
+            '{"@type":"BreadcrumbList","itemListElement":['
+            '{"@type":"ListItem","position":1,"item":{"name":"Anasayfa"}},'
+            '{"@type":"ListItem","position":2,"item":{"name":"Ruj"}}]}'
+            '</script>')
+    assert parse_jsonld(html)["category"] == "Ruj"

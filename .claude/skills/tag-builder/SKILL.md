@@ -20,7 +20,9 @@ Her aşama: `python run.py <aşama> --brand <slug>` (repo kökünden, .venv akti
    `brands/<slug>.json` dosyasını kendin yaz (şablon: `brands/_template.json`;
    slug küçük harf-rakam-tire ve dosya adıyla aynı olmalı).
 2. **Ürün URL'leri**: kullanıcıdan al, `workspace/<slug>/input/urls.txt`'e yaz
-   (her satıra bir URL; # ile yorum).
+   (her satıra bir URL; # ile yorum). urls.txt satırlarına kategori ekle
+   (`https://... Ruj`); kategorisiz ürünler "Genel" havuzuna düşer — pools'tan
+   önce products.jsonl'daki category alanlarını kontrol et.
 3. Aşamaları sırayla çalıştır. Komut **exit 3** ile çıkar VE çıktıda
    `pending_llm/` dosyaları listelenirse → "LLM görevi işleme" bölümünü uygula,
    komutu tekrar çalıştır. (exit 2 = argparse kullanım hatası, karıştırma.)

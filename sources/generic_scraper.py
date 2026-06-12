@@ -38,39 +38,75 @@ def _iter_jsonld_objects(html: str):
                 yield obj
 
 
+def _last_segment(value: str) -> str:
+    """'Kozmetik > Makyaj > Ruj' veya 'Kozmetik/Makyaj/Ruj' → 'Ruj'"""
+    for sep in (">", "/"):
+        if sep in value:
+            return value.split(sep)[-1].strip()
+    return value.strip()
+
+
 def parse_jsonld(html: str):
+    product_result = None
+    breadcrumb_category = None
+
     for obj in _iter_jsonld_objects(html):
-        if str(obj.get("@type", "")).lower() != "product":
-            continue
-        brand = obj.get("brand")
-        if isinstance(brand, dict):
-            brand = brand.get("name")
-        if isinstance(brand, list):
-            brand = brand[0] if brand else None
+        typ = str(obj.get("@type", "")).lower()
+
+        if typ == "product" and product_result is None:
+            brand = obj.get("brand")
             if isinstance(brand, dict):
                 brand = brand.get("name")
-        if brand is not None and not isinstance(brand, str):
-            brand = str(brand)
-        offers = obj.get("offers") or {}
-        if isinstance(offers, list):
-            offers = offers[0] if offers else {}
-        if not isinstance(offers, dict):
-            offers = {}
-        images = obj.get("image") or []
-        if isinstance(images, str):
-            images = [images]
-        attrs = {}
-        for p in obj.get("additionalProperty", []) or []:
-            if isinstance(p, dict) and p.get("name") and p.get("value") is not None:
-                attrs[str(p["name"])] = str(p["value"])
-        return {
-            "name": obj.get("name"),
-            "description": obj.get("description"),
-            "brand": brand,
-            "images": images,
-            "price": str(offers.get("price")) if offers.get("price") is not None else None,
-            "attributes": attrs,
-        }
+            if isinstance(brand, list):
+                brand = brand[0] if brand else None
+                if isinstance(brand, dict):
+                    brand = brand.get("name")
+            if brand is not None and not isinstance(brand, str):
+                brand = str(brand)
+            offers = obj.get("offers") or {}
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            if not isinstance(offers, dict):
+                offers = {}
+            images = obj.get("image") or []
+            if isinstance(images, str):
+                images = [images]
+            attrs = {}
+            for p in obj.get("additionalProperty", []) or []:
+                if isinstance(p, dict) and p.get("name") and p.get("value") is not None:
+                    attrs[str(p["name"])] = str(p["value"])
+            # Extract category from Product object
+            raw_cat = obj.get("category")
+            category = None
+            if isinstance(raw_cat, str) and raw_cat.strip():
+                category = _last_segment(raw_cat)
+            product_result = {
+                "name": obj.get("name"),
+                "description": obj.get("description"),
+                "brand": brand,
+                "images": images,
+                "price": str(offers.get("price")) if offers.get("price") is not None else None,
+                "attributes": attrs,
+                "category": category,
+            }
+
+        elif typ == "breadcrumblist" and breadcrumb_category is None:
+            items = obj.get("itemListElement") or []
+            if items:
+                last = items[-1]
+                if isinstance(last, dict):
+                    item_node = last.get("item") or {}
+                    name = (
+                        item_node.get("name") if isinstance(item_node, dict) else None
+                    ) or last.get("name")
+                    if name:
+                        breadcrumb_category = str(name).strip()
+
+    if product_result is not None:
+        # Breadcrumb fills only when product has no category
+        if not product_result.get("category") and breadcrumb_category:
+            product_result["category"] = breadcrumb_category
+        return product_result
     return None
 
 
@@ -165,14 +201,19 @@ def collect_from_urls(
     delay: float = 1.0,
     timeout: int = 20,
     render_fallback: bool = True,
+    categories: dict | None = None,
 ) -> dict:
     """URL listesini gez; işlenmişleri atla; hataları errors.jsonl'a yaz.
 
     render_fallback=True ise statik fetch'te ürün adı alınamazsa
     Playwright ile yeniden dener.
+
+    categories: url → explicit category mapping (kazınan değerin üzerine yazar).
     """
     done = workspace.processed_ids("products/products.jsonl")
     counts = {"yeni": 0, "atlandı": 0, "hata": 0, "render": 0}
+    if categories is None:
+        categories = {}
     for url in urls:
         pid = product_record(url)["id"]
         if pid in done:
@@ -194,6 +235,8 @@ def collect_from_urls(
                 rendered_html = fetch_html_rendered(url, timeout=max(timeout, 30))
                 rec = scrape_product(url, html=rendered_html)
                 if rec.get("name"):
+                    if url in categories:
+                        rec["category"] = categories[url]
                     workspace.append_jsonl("products/products.jsonl", rec)
                     counts["yeni"] += 1
                     counts["render"] += 1
@@ -204,6 +247,8 @@ def collect_from_urls(
                 error = e
                 rec = None
         elif rec is not None and rec.get("name"):
+            if url in categories:
+                rec["category"] = categories[url]
             workspace.append_jsonl("products/products.jsonl", rec)
             counts["yeni"] += 1
             error = None

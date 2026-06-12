@@ -100,3 +100,45 @@ def test_export_stage_writes_json_and_excel(tmp_path):
     out = run_stage("export", _brand(), {}, root=str(tmp_path), targets=["excel"])
     import os
     assert os.path.exists(out["json"]) and os.path.exists(out["excel"])
+
+
+def test_collect_stage_parses_url_categories(tmp_path, monkeypatch):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    import os
+    os.makedirs(ws.path("input"), exist_ok=True)
+    open(ws.path("input/urls.txt"), "w", encoding="utf-8").write(
+        "# yorum\nhttps://x/1 Ruj Kalemi\nhttps://x/2\n")
+    captured = {}
+    def fake_collect(urls, ws_, delay=1.0, timeout=20, render_fallback=True, categories=None):
+        captured["urls"] = urls
+        captured["categories"] = categories
+        return {"yeni": 0, "atlandı": 0, "hata": 0, "render": 0}
+    import core.pipeline as cp
+    monkeypatch.setattr("sources.generic_scraper.collect_from_urls", fake_collect)
+    run_stage("collect", _brand(), {}, root=str(tmp_path))
+    assert captured["urls"] == ["https://x/1", "https://x/2"]
+    assert captured["categories"] == {"https://x/1": "Ruj Kalemi"}
+
+
+def test_collect_stage_trendyol_url_categories(tmp_path, monkeypatch):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr("sources.trendyol.fetch_aggregations",
+                        lambda url, timeout=20: {"Renk": ["Kırmızı"]})
+    brand = BrandProfile(name="Marka", slug="m", sector="moda",
+                         trendyol_urls=[{"url": "https://t/abiye-x-c56", "category": "Abiye"}])
+    run_stage("collect", brand, {}, root=str(tmp_path))
+    raw = ws.read_json("products/raw_facets.json")
+    assert "Abiye" in raw
+
+
+def test_collect_stage_writes_seo_landings(tmp_path, monkeypatch):
+    ws = Workspace("m", root=str(tmp_path)).ensure()
+    monkeypatch.setattr("sources.trendyol.fetch_aggregations",
+                        lambda url, timeout=20: {"Renk": ["Kırmızı"]})
+    monkeypatch.setattr("sources.trendyol.extract_category_seo_landings",
+                        lambda url, cat: [{"url": "/kirmizi-abiye-y-s1", "label": "Kırmızı Abiye"}])
+    brand = BrandProfile(name="Marka", slug="m", sector="moda",
+                         trendyol_urls=[{"url": "https://t/abiye-x-c56", "category": "Abiye"}])
+    run_stage("collect", brand, {}, root=str(tmp_path))
+    landings = ws.read_json("products/seo_landings.json")
+    assert landings["Abiye"][0]["label"] == "Kırmızı Abiye"
