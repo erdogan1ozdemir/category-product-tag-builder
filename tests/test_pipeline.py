@@ -124,6 +124,8 @@ def test_collect_stage_trendyol_url_categories(tmp_path, monkeypatch):
     ws = Workspace("m", root=str(tmp_path)).ensure()
     monkeypatch.setattr("sources.trendyol.fetch_aggregations",
                         lambda url, timeout=20: {"Renk": ["Kırmızı"]})
+    monkeypatch.setattr("sources.trendyol.extract_category_seo_landings",
+                        lambda url, cat: [])
     brand = BrandProfile(name="Marka", slug="m", sector="moda",
                          trendyol_urls=[{"url": "https://t/abiye-x-c56", "category": "Abiye"}])
     run_stage("collect", brand, {}, root=str(tmp_path))
