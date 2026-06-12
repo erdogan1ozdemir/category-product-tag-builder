@@ -78,6 +78,11 @@ def test_collect_from_urls_skips_done_and_logs_errors(tmp_path, monkeypatch):
         return product_record(url, name="Ürün")
 
     monkeypatch.setattr(gs, "scrape_product", fake_scrape)
+
+    def fake_render(url, timeout=30):
+        raise ValueError("render de başarısız")
+
+    monkeypatch.setattr(gs, "fetch_html_rendered", fake_render)
     urls = ["https://x/1", "https://x/bozuk"]
     counts = gs.collect_from_urls(urls, ws, delay=0)
     assert counts["yeni"] == 1 and counts["atlandı"] == 0 and counts["hata"] == 1
