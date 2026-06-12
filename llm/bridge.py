@@ -38,7 +38,7 @@ def get_bridge(config: dict, workspace=None):
         return InlineSkillBridge(workspace)
     if provider == "claude-cli":
         from .claude_cli import ClaudeCLIBridge
-        return ClaudeCLIBridge(llm.get("model", ""))
+        return ClaudeCLIBridge(llm.get("model", ""), timeout=llm.get("timeout_seconds", 300))
     if provider in ("anthropic", "gemini", "perplexity"):
         from .api_clients import ApiBridge
         return ApiBridge(provider, llm)
