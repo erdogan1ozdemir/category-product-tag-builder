@@ -14,12 +14,13 @@ KULLANIM:
     python run.py retry-errors --brand flormar      # hatalı collect URL'lerini yeniden dene
 
 LLM provider config.json'da seçilir (inline | claude-cli | anthropic | gemini | perplexity).
-inline modda komut, LLM sonucu bekleyen görev dosyalarını listeleyip çıkar (exit 2);
+inline modda komut, LLM sonucu bekleyen görev dosyalarını listeleyip çıkar (exit 3);
 sohbetteki Claude sonuçları yazınca aynı komut yeniden çalıştırılır.
 """
 import argparse
 import json
 import os
+import re
 import sys
 
 from core.brand_profile import load_brand
@@ -45,6 +46,9 @@ def cmd_init(args):
         "trendyol_brand": input("  Trendyol marka adı [boş]: ").strip(),
         "language": input("  Dil [tr]: ").strip() or "tr",
     }
+    if not re.fullmatch(r"[a-z0-9-]+", data["slug"]):
+        print("✗ slug yalnız küçük harf, rakam ve tire içerebilir")
+        return
     urls = input("  Trendyol kategori/marka URL'leri (virgülle) [boş]: ").strip()
     data["trendyol_urls"] = [u.strip() for u in urls.split(",") if u.strip()]
     os.makedirs("brands", exist_ok=True)
@@ -135,7 +139,7 @@ def main():
     except PendingLLMWork as e:
         print(str(e))
         print(f"\nSonuçlar yazıldıktan sonra: python run.py {stage} --brand {brand.slug}")
-        sys.exit(2)
+        sys.exit(3)
 
 
 if __name__ == "__main__":
